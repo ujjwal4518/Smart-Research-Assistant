@@ -3,34 +3,34 @@ import tempfile
 import os
 from dotenv import load_dotenv
 
-# LangChain + Chroma tools
+# LangChain core tools
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_community.chat_message_histories import ChatMessageHistory
-from langchain_chroma import Chroma
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain.vectorstores import FAISS  # ✅ Replaced Chroma with FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
 from langchain_core.runnables.history import RunnableWithMessageHistory
 
-# 🔐 Load API keys from .env
+# 🔐 Load API keys
 load_dotenv()
 os.environ['HF_TOKEN'] = os.getenv("HF_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-# 🔍 Load model and embeddings
+# Load LLM + Embeddings
 llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="Gemma2-9b-It")
 embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
-# 🎨 Streamlit Page Setup
+# UI setup
 st.set_page_config(page_title="Smart Research Assistant", layout="wide")
 st.title("📚 Smart Research Assistant")
-st.write("Upload a PDF or TXT file and explore its contents using AI-powered Q&A or challenge mode!")
+st.write("Upload a PDF or TXT file and interact with its content using Ask Anything or Challenge Me mode!")
 
-# 🧠 Session memory
+# Session memory
 session_id = st.text_input("Session ID (optional for multi-chat memory):", value="default_session")
 if "store" not in st.session_state:
     st.session_state.store = {}
@@ -40,7 +40,7 @@ def get_session_history(session: str) -> BaseChatMessageHistory:
         st.session_state.store[session] = ChatMessageHistory()
     return st.session_state.store[session]
 
-# 📁 Upload PDF or TXT files
+# File upload
 uploaded_files = st.file_uploader("📄 Upload your documents (PDF or TXT)", type=["pdf", "txt"], accept_multiple_files=True)
 documents = []
 
@@ -53,21 +53,13 @@ if uploaded_files:
         loader = PyPDFLoader(temp_path) if uploaded_file.name.endswith(".pdf") else TextLoader(temp_path)
         documents.extend(loader.load())
 
-    # ✂️ Split and embed the documents
+    # Split and embed
     splitter = RecursiveCharacterTextSplitter(chunk_size=5000, chunk_overlap=500)
     chunks = splitter.split_documents(documents)
-    vectorstore = Chroma.from_documents(documents=chunks, embedding=embeddings)
-
-    # ✅ Patch telemetry errors AFTER Chroma is initialized
-    try:
-        import chromadb.telemetry.posthog as posthog
-        posthog.capture = lambda *args, **kwargs: None
-    except Exception:
-        pass
-
+    vectorstore = FAISS.from_documents(documents=chunks, embedding=embeddings)  # ✅ FAISS used here
     retriever = vectorstore.as_retriever()
 
-    # 🧾 Auto-summary
+    # Auto-summary
     st.subheader("🔍 Auto-Summary")
     summary_prompt = ChatPromptTemplate.from_messages([
         ("system", "Summarize the following document in under 150 words:\n\n{context}")
@@ -76,7 +68,7 @@ if uploaded_files:
     summary = summary_chain.invoke({"context": chunks})
     st.success(summary)
 
-    # 💬 Ask Anything Mode
+    # Ask Anything
     with st.expander("💬 Ask Anything", expanded=True):
         user_question = st.text_input("What would you like to know?")
         if user_question:
@@ -112,7 +104,7 @@ if uploaded_files:
 
             st.markdown(f"**🧠 Answer:** {result['answer']}")
 
-    # 🧠 Challenge Me Mode
+    # Challenge Me
     with st.expander("🧠 Challenge Me"):
         if st.button("🎯 Generate Challenge Questions"):
             challenge_prompt = ChatPromptTemplate.from_messages([
@@ -121,7 +113,6 @@ if uploaded_files:
             challenge_chain = create_stuff_documents_chain(llm, challenge_prompt)
             output = challenge_chain.invoke({"context": chunks})
 
-            # Clean and extract actual questions
             text = output.get("output", "") if isinstance(output, dict) else str(output)
             questions = [line.strip("-•1234567890. ").strip() for line in text.split("\n") if "?" in line][:3]
 
@@ -130,7 +121,6 @@ if uploaded_files:
             else:
                 st.error("❌ Could not extract valid questions. Try again or check the document.")
 
-        # Show questions and allow user input
         if "challenge_questions" in st.session_state:
             st.subheader("📌 Your Challenge Questions")
             user_responses = []
