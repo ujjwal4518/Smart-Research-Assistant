@@ -1,4 +1,4 @@
-langchain
+langchain==0.1.20
 python-dotenv
 ipykernel
 langchain-community
