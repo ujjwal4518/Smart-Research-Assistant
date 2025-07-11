@@ -1,5 +1,9 @@
 # 📚 Smart Research Assistant
 
+🚀 [Click here to try it live](https://smart-research-assistant-pjning6cja22z9cp4kevyp.streamlit.app/)
+
+An AI-powered app that helps you summarize, question, and challenge your understanding of documents (PDF/TXT).
+
 An AI-powered Streamlit web app that allows users to upload PDFs or TXT documents and interact with them using natural language. You can ask questions about the content, generate logical challenge questions, and get automated summaries — all powered by RAG (Retrieval-Augmented Generation).
 
 ---
