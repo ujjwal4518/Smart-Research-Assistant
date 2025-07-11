@@ -11,7 +11,7 @@ from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain.vectorstores import FAISS  # ✅ Replaced Chroma with FAISS
+from langchain.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
 from langchain_core.runnables.history import RunnableWithMessageHistory
@@ -56,7 +56,7 @@ if uploaded_files:
     # Split and embed
     splitter = RecursiveCharacterTextSplitter(chunk_size=5000, chunk_overlap=500)
     chunks = splitter.split_documents(documents)
-    vectorstore = FAISS.from_documents(documents=chunks, embedding=embeddings)  # ✅ FAISS used here
+    vectorstore = FAISS.from_documents(documents=chunks, embedding=embeddings)
     retriever = vectorstore.as_retriever()
 
     # Auto-summary
@@ -102,24 +102,29 @@ if uploaded_files:
                 config={"configurable": {"session_id": session_id}}
             )
 
-            st.markdown(f"🧠 Answer:** {result['answer']}")
+            st.markdown(f"🧠 **Answer:** {result['answer']}")
 
     # Challenge Me
     with st.expander("🧠 Challenge Me"):
         if st.button("🎯 Generate Challenge Questions"):
             challenge_prompt = ChatPromptTemplate.from_messages([
-                ("system", "Generate 3 logic-based or comprehension questions from this document:\n\n{context}")
+                ("system", 
+                 "Generate exactly 3 challenging, logic-based or comprehension questions based on the document below. "
+                 "Number them clearly as 1., 2., and 3.:\n\n{context}")
             ])
             challenge_chain = create_stuff_documents_chain(llm, challenge_prompt)
             output = challenge_chain.invoke({"context": chunks})
 
+            # Parse and clean questions
             text = output.get("output", "") if isinstance(output, dict) else str(output)
-            questions = [line.strip("-•1234567890. ").strip() for line in text.split("\n") if "?" in line][:3]
+            lines = text.split("\n")
+            questions = [line.strip("1234567890. -•").strip() for line in lines if "?" in line]
 
-            if questions:
-                st.session_state["challenge_questions"] = questions
+            if len(questions) >= 3:
+                st.session_state["challenge_questions"] = questions[:3]
             else:
-                st.error("❌ Could not extract valid questions. Try again or check the document.")
+                st.error("❌ Less than 3 valid questions found. Try again or use a more detailed document.")
+                st.text_area("🔎 Raw Output (for debugging)", text, height=150)
 
         if "challenge_questions" in st.session_state:
             st.subheader("📌 Your Challenge Questions")
@@ -133,8 +138,8 @@ if uploaded_files:
                 for i, (question, answer) in enumerate(user_responses):
                     eval_prompt = ChatPromptTemplate.from_messages([
                         ("system", 
-                         "You are a tutor evaluating a student's response. Evaluate the answer based on the document. "
-                         "Say whether it's correct, and explain briefly with reference to the content.\n\n{context}"),
+                         "You are a tutor evaluating a student's response. Assess whether the answer is correct using the document. "
+                         "Give short feedback with justification.\n\n{context}"),
                         ("human", f"Question: {question}\nAnswer: {answer}")
                     ])
                     eval_chain = create_stuff_documents_chain(llm, eval_prompt)
