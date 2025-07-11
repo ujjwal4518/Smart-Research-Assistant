@@ -5,13 +5,13 @@ from dotenv import load_dotenv
 
 # LangChain core tools
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
-from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain.chains.combine_documents import create_stuff_documents_chain, create_map_reduce_documents_chain
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain.vectorstores import FAISS 
+from langchain.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
 from langchain_core.runnables.history import RunnableWithMessageHistory
@@ -56,7 +56,7 @@ if uploaded_files:
     # Split and embed
     splitter = RecursiveCharacterTextSplitter(chunk_size=5000, chunk_overlap=500)
     chunks = splitter.split_documents(documents)
-    vectorstore = FAISS.from_documents(documents=chunks, embedding=embeddings)  # ✅ FAISS used here
+    vectorstore = FAISS.from_documents(documents=chunks, embedding=embeddings)
     retriever = vectorstore.as_retriever()
 
     # Auto-summary
@@ -64,8 +64,8 @@ if uploaded_files:
     summary_prompt = ChatPromptTemplate.from_messages([
         ("system", "Summarize the following document in under 150 words:\n\n{context}")
     ])
-    summary_chain = create_stuff_documents_chain(llm, summary_prompt)
-    summary = summary_chain.invoke({"context": chunks})
+    summary_chain = create_map_reduce_documents_chain(llm, summary_prompt)
+    summary = summary_chain.invoke({"context": chunks[:20]})  # Optional: limit for performance
     st.success(summary)
 
     # Ask Anything
@@ -111,7 +111,7 @@ if uploaded_files:
                 ("system", "Generate 3 logic-based or comprehension questions from this document:\n\n{context}")
             ])
             challenge_chain = create_stuff_documents_chain(llm, challenge_prompt)
-            output = challenge_chain.invoke({"context": chunks})
+            output = challenge_chain.invoke({"context": chunks[:20]})  # limit if needed
 
             text = output.get("output", "") if isinstance(output, dict) else str(output)
             questions = [line.strip("-•1234567890. ").strip() for line in text.split("\n") if "?" in line][:3]
@@ -138,7 +138,7 @@ if uploaded_files:
                         ("human", f"Question: {question}\nAnswer: {answer}")
                     ])
                     eval_chain = create_stuff_documents_chain(llm, eval_prompt)
-                    feedback = eval_chain.invoke({"context": chunks})
+                    feedback = eval_chain.invoke({"context": chunks[:20]})  # limit for safety
                     st.markdown(f"**Feedback for Q{i+1}:** {feedback}")
                     st.markdown("---")
 
