@@ -5,13 +5,13 @@ from dotenv import load_dotenv
 
 # LangChain core tools
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
-from langchain.chains.combine_documents import create_stuff_documents_chain, create_map_reduce_documents_chain
+from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain.vectorstores import FAISS
+from langchain.vectorstores import FAISS  # ✅ Replaced Chroma with FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
 from langchain_core.runnables.history import RunnableWithMessageHistory
@@ -22,7 +22,7 @@ os.environ['HF_TOKEN'] = os.getenv("HF_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 # Load LLM + Embeddings
-llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="mixtral-8x7b")
+llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="Gemma2-9b-It")
 embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
 # UI setup
@@ -54,9 +54,9 @@ if uploaded_files:
         documents.extend(loader.load())
 
     # Split and embed
-    splitter = RecursiveCharacterTextSplitter(chunk_size=8000, chunk_overlap=200)
+    splitter = RecursiveCharacterTextSplitter(chunk_size=5000, chunk_overlap=500)
     chunks = splitter.split_documents(documents)
-    vectorstore = FAISS.from_documents(documents=chunks, embedding=embeddings)
+    vectorstore = FAISS.from_documents(documents=chunks, embedding=embeddings)  # ✅ FAISS used here
     retriever = vectorstore.as_retriever()
 
     # Auto-summary
@@ -64,8 +64,8 @@ if uploaded_files:
     summary_prompt = ChatPromptTemplate.from_messages([
         ("system", "Summarize the following document in under 150 words:\n\n{context}")
     ])
-    summary_chain = create_map_reduce_documents_chain(llm, summary_prompt)
-    summary = summary_chain.invoke({"context": chunks[:20]})  # Limit to first 20 chunks
+    summary_chain = create_stuff_documents_chain(llm, summary_prompt)
+    summary = summary_chain.invoke({"context": chunks})
     st.success(summary)
 
     # Ask Anything
@@ -80,7 +80,7 @@ if uploaded_files:
             history_aware_retriever = create_history_aware_retriever(llm, retriever, standalone_prompt)
 
             qa_prompt = ChatPromptTemplate.from_messages([
-                ("system",
+                ("system", 
                  "You're a helpful assistant. Use the context to answer in 3 sentences max. "
                  "Always provide justification like: 'This is supported by Section 2.1'.\n\n{context}"),
                 MessagesPlaceholder("chat_history"),
@@ -102,7 +102,7 @@ if uploaded_files:
                 config={"configurable": {"session_id": session_id}}
             )
 
-            st.markdown(f"**🧠 Answer:** {result['answer']}")
+            st.markdown(f"🧠 Answer:** {result['answer']}")
 
     # Challenge Me
     with st.expander("🧠 Challenge Me"):
@@ -111,7 +111,7 @@ if uploaded_files:
                 ("system", "Generate 3 logic-based or comprehension questions from this document:\n\n{context}")
             ])
             challenge_chain = create_stuff_documents_chain(llm, challenge_prompt)
-            output = challenge_chain.invoke({"context": chunks[:20]})  # Limit for speed/safety
+            output = challenge_chain.invoke({"context": chunks})
 
             text = output.get("output", "") if isinstance(output, dict) else str(output)
             questions = [line.strip("-•1234567890. ").strip() for line in text.split("\n") if "?" in line][:3]
@@ -125,22 +125,22 @@ if uploaded_files:
             st.subheader("📌 Your Challenge Questions")
             user_responses = []
             for i, question in enumerate(st.session_state["challenge_questions"]):
-                st.markdown(f"**Q{i+1}:** {question}")
+                st.markdown(f"*Q{i+1}:* {question}")
                 user_input = st.text_input(f"Your Answer to Q{i+1}:", key=f"challenge_answer_{i}")
                 user_responses.append((question, user_input))
 
             if st.button("✅ Evaluate My Answers"):
                 for i, (question, answer) in enumerate(user_responses):
                     eval_prompt = ChatPromptTemplate.from_messages([
-                        ("system",
+                        ("system", 
                          "You are a tutor evaluating a student's response. Evaluate the answer based on the document. "
                          "Say whether it's correct, and explain briefly with reference to the content.\n\n{context}"),
                         ("human", f"Question: {question}\nAnswer: {answer}")
                     ])
                     eval_chain = create_stuff_documents_chain(llm, eval_prompt)
-                    feedback = eval_chain.invoke({"context": chunks[:20]})  # Limit for safety
-                    st.markdown(f"**Feedback for Q{i+1}:** {feedback}")
+                    feedback = eval_chain.invoke({"context": chunks})
+                    st.markdown(f"*Feedback for Q{i+1}:* {feedback}")
                     st.markdown("---")
 
 else:
-    st.info("⬆️ Upload a PDF or TXT file to begin.")
+    st.info("⬆ Upload a PDF or TXT file to begin.")
