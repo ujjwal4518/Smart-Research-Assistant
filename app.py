@@ -110,9 +110,10 @@ if uploaded_files:
         if st.button("🎯 Generate Challenge Questions"):
             challenge_prompt = ChatPromptTemplate.from_messages([
                 ("system",
-                 "Generate exactly 3 logic-based or comprehension questions from this document. "
-                 "Number them clearly as:\n\n1. ...\n2. ...\n3. ...\n\nEnsure each ends with a question mark.")
+                "Generate exactly 3 logic-based or comprehension questions from the following document context. "
+                 "Number them clearly as:\n\n1. ...\n2. ...\n3. ...\n\nEnsure each ends with a question mark.\n\n{context}")
             ])
+
             challenge_chain = create_stuff_documents_chain(llm, challenge_prompt)
             output = challenge_chain.invoke({"context": chunks})
 
